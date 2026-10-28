@@ -62,15 +62,15 @@ def get_price(symbol):
     try:
         usd = global_price(coin_id)
         result.append(f"🌍 بازار جهانی: {usd:,.6g} دلار")
-    except Exception:
+        except Exception as error:
+        print("CoinGecko price error:", repr(error))
         result.append("🌍 بازار جهانی: دریافت قیمت ناموفق بود")
-
     try:
         toman = nobitex_price(symbol)
         result.append(f"🇮🇷 نوبیتکس: {toman:,.0f} تومان")
-    except Exception:
+        except Exception as error:
+        print("Nobitex price error:", repr(error))
         result.append("🇮🇷 نوبیتکس: دریافت قیمت ناموفق بود")
-
     result.append("\n⚠️ این اطلاعات برای بررسی قیمت است، نه تضمین سود.")
     return "\n".join(result)
 
