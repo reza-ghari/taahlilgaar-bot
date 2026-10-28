@@ -17,35 +17,54 @@ COINS = {
     "trx": ("tron", "ترون"),
 }
 
+
 def global_price(coin_id):
     url = "https://api.coingecko.com/api/v3/simple/price"
+
     response = requests.get(
         url,
-        params={"ids": coin_id, "vs_currencies": "usd"},
-        timeout=15
+        params={
+            "ids": coin_id,
+            "vs_currencies": "usd"
+        },
+        timeout=20
     )
+
     response.raise_for_status()
     data = response.json()
-    return data[coin_id]["usd"]
+
+    if coin_id not in data or "usd" not in data[coin_id]:
+        raise ValueError("قیمت در پاسخ بازار جهانی موجود نیست")
+
+    return float(data[coin_id]["usd"])
+
 
 def nobitex_price(symbol):
     url = "https://api.nobitex.ir/market/stats"
+
     response = requests.get(
         url,
-        params={"srcCurrency": symbol, "dstCurrency": "rls"},
-        timeout=15
+        params={
+            "srcCurrency": symbol,
+            "dstCurrency": "rls"
+        },
+        timeout=20
     )
+
     response.raise_for_status()
     data = response.json()
+
     pair = symbol + "-rls"
     stats = data.get("stats", {}).get(pair)
 
     if not stats or not stats.get("latest"):
-        raise ValueError("قیمت این ارز در نوبیتکس پیدا نشد")
+        raise ValueError("قیمت این ارز در پاسخ نوبیتکس موجود نیست")
 
     rial = float(stats["latest"])
     toman = rial / 10
+
     return toman
+
 
 def get_price(symbol):
     symbol = symbol.lower().strip()
@@ -57,30 +76,42 @@ def get_price(symbol):
         )
 
     coin_id, coin_name = COINS[symbol]
+
     result = [f"📊 قیمت {coin_name}\n"]
 
     try:
         usd = global_price(coin_id)
         result.append(f"🌍 بازار جهانی: {usd:,.6g} دلار")
-        except Exception as error:
+
+    except Exception as error:
         print("CoinGecko price error:", repr(error))
         result.append("🌍 بازار جهانی: دریافت قیمت ناموفق بود")
+
     try:
         toman = nobitex_price(symbol)
         result.append(f"🇮🇷 نوبیتکس: {toman:,.0f} تومان")
-        except Exception as error:
+
+    except Exception as error:
         print("Nobitex price error:", repr(error))
         result.append("🇮🇷 نوبیتکس: دریافت قیمت ناموفق بود")
-    result.append("\n⚠️ این اطلاعات برای بررسی قیمت است، نه تضمین سود.")
+
+    result.append(
+        "\n⚠️ قیمت‌ها ممکن است با تأخیر همراه باشند. "
+        "این اطلاعات تضمین‌کننده سود نیستند."
+    )
+
     return "\n".join(result)
+
 
 @app.route("/")
 def home():
     return "Taahlilgaar Bot is running!"
 
+
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
 
 def telegram_bot():
     if not TOKEN:
@@ -93,6 +124,7 @@ def telegram_bot():
     while True:
         try:
             params = {"timeout": 25}
+
             if offset is not None:
                 params["offset"] = offset
 
@@ -101,70 +133,44 @@ def telegram_bot():
                 params=params,
                 timeout=35
             )
-            response.raise_for_status()
 
-            for update in response.json().get("result", []):
+            response.raise_for_status()
+            updates = response.json().get("result", [])
+
+            for update in updates:
                 offset = update["update_id"] + 1
+
                 message = update.get("message")
 
                 if not message or not message.get("text"):
                     continue
 
                 chat_id = message["chat"]["id"]
-                text = message["text"].strip()
-                parts = text.split()
+                message_text = message["text"].strip()
+                parts = message_text.split()
 
-                if text == "/start":
+                command = parts[0].split("@")[0].lower()
+
+                if command == "/start":
                     reply = (
                         "سلام! 👋 به ربات تحلیلگر بازار خوش آمدی.\n\n"
-                        "ربات فعال است. 🤖\n\n"
-                        "📊 نمایش قیمت ارزها:\n"
+                        "🤖 ربات با موفقیت فعال شده است.\n\n"
+                        "📊 برای دریافت قیمت ارزها، دستورهای زیر را بفرست:\n"
                         "/price btc\n"
                         "/price eth\n"
                         "/price usdt\n\n"
                         "برای راهنما /help را بفرست."
                     )
 
-                elif text == "/help":
+                elif command == "/help":
                     reply = (
                         "📚 راهنمای ربات\n\n"
                         "/start : شروع کار\n"
-                        "/help : راهنما\n"
-                        "/price btc : قیمت بیت‌کوین\n"
-                        "/price eth : قیمت اتریوم\n"
-                        "/price usdt : قیمت تتر\n"
-                        "/price bnb : قیمت بایننس کوین\n"
-                        "/price sol : قیمت سولانا\n"
-                        "/price doge : قیمت دوج‌کوین\n"
-                        "/price trx : قیمت ترون\n\n"
-                        "قیمت‌ها از منابع عمومی دریافت می‌شوند."
-                    )
-
-                elif parts[0].split("@")[0] == "/price":
-                    symbol = parts[1] if len(parts) > 1 else "btc"
-                    reply = get_price(symbol)
-
-                else:
-                    reply = (
-                        "دستور را متوجه نشدم. 🤔\n"
-                        "برای راهنما /help را بفرست."
-                    )
-
-                requests.post(
-                    api + "sendMessage",
-                    json={"chat_id": chat_id, "text": reply},
-                    timeout=20
-                ).raise_for_status()
-
-        except Exception as error:
-            print("Telegram connection error:", error)
-            time.sleep(5)
-
-if __name__ == "__main__":
-    threading.Thread(
-        target=telegram_bot,
-        daemon=True
-    ).start()
-
-    port = int(os.environ.get("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port)
+                        "/help : راهنما\n\n"
+                        "📊 دستورهای قیمت:\n"
+                        "/price btc : بیت‌کوین\n"
+                        "/price eth : اتریوم\n"
+                        "/price usdt : تتر\n"
+                        "/price bnb : بایننس کوین\n"
+                        "/price sol : سولانا\n"
+                        "/price doge : دوج‌کو
