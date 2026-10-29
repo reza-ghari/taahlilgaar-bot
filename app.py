@@ -173,4 +173,50 @@ def telegram_bot():
                         "/price usdt : تتر\n"
                         "/price bnb : بایننس کوین\n"
                         "/price sol : سولانا\n"
-                        "/price doge : دوج‌کو
+                        "/price doge : دوج‌کوین\n"
+                        "/price trx : ترون\n\n"
+                        "قیمت‌ها از منابع آنلاین دریافت می‌شوند."
+                    )
+
+                elif command == "/price":
+                    symbol = parts[1] if len(parts) > 1 else "btc"
+                    reply = get_price(symbol)
+
+                else:
+                    reply = (
+                        "دستور را متوجه نشدم. 🤔\n"
+                        "برای راهنما /help را بفرست."
+                    )
+
+                try:
+                    send_response = requests.post(
+                        api + "sendMessage",
+                        json={
+                            "chat_id": chat_id,
+                            "text": reply
+                        },
+                        timeout=20
+                    )
+
+                    send_response.raise_for_status()
+
+                except Exception as error:
+                    print("Telegram send error:", repr(error))
+
+        except Exception as error:
+            print("Telegram connection error:", repr(error))
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    threading.Thread(
+        target=telegram_bot,
+        daemon=True
+    ).start()
+
+    port = int(os.environ.get("PORT", "10000"))
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
